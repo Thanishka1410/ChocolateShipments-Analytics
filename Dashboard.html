@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<style>
+  :root{
+    --dark: #06421f;
+    --mid: #11701f;
+    --light: #43c620;
+    --pale: #f6faf4;
+    --card-border: #d0e2cb;
+    --text: #2d412d;
+    --muted: #6a7d6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background: var(--pale);
+    margin: 0;
+    padding: 18px 22px 26px;
+    color: var(--text);
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    color: var(--dark);
+  }
+  .subtitle { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+
+  /* ---- Filters ---- */
+  .filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 18px;
+  }
+  .filters label { font-size: 12px; color: var(--muted); margin-right: 4px; }
+  .filters select {
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    font-size: 13px;
+    background: var(--pale);
+    color: var(--text);
+  }
+  .filters button {
+    margin-left: auto;
+    background: var(--mid);
+    color: #fff;
+    border: none;
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .filters button:hover { background: var(--dark); }
+
+  /* ---- KPI cards ---- */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi-card {
+    background: #fff;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s ease;
+  }
+  .kpi-card:hover { transform: translateY(-2px); }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--dark), var(--light));
+  }
+  .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .kpi-value { font-size: 24px; font-weight: 700; color: var(--dark); margin-top: 4px; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ---- Charts grid ---- */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+  }
+  .chart-card {
+    background: #fff;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 12px 14px 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .chart-card h3 {
+    font-size: 13px;
+    margin: 0 0 6px;
+    color: var(--dark);
+  }
+  .chart-card .chart { width: 100%; height: 260px; }
+  .chart-card.wide { grid-column: 1 / span 2; }
+
+  .loading {
+    text-align: center;
+    padding: 60px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 3px solid var(--card-border);
+    border-top-color: var(--mid);
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+  <h1>🍫 Chocolate Shipments Dashboard</h1>
+  <div class="subtitle" id="subtitle">Loading live data…</div>
+
+  <div id="loading" class="loading">
+    <div class="spinner"></div>
+    Pulling shipment data from your sheet…
+  </div>
+
+  <div id="app" style="display:none;">
+    <div class="filters">
+      <label>Product</label>
+      <select id="f-product"><option value="">All</option></select>
+
+      <label>Region</label>
+      <select id="f-region"><option value="">All</option></select>
+
+      <label>Supplier</label>
+      <select id="f-supplier"><option value="">All</option></select>
+
+      <label>Status</label>
+      <select id="f-status"><option value="">All</option></select>
+
+      <button id="reset-btn">Reset Filters</button>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Total Amount</div>
+        <div class="kpi-value" id="kpi-amount">0</div>
+        <div class="kpi-sub">Across filtered shipments</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Boxes</div>
+        <div class="kpi-value" id="kpi-boxes">0</div>
+        <div class="kpi-sub">Units shipped</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Shipments</div>
+        <div class="kpi-value" id="kpi-count">0</div>
+        <div class="kpi-sub">Order count</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Delivered Rate</div>
+        <div class="kpi-value" id="kpi-delivered">0%</div>
+        <div class="kpi-sub">Of filtered orders</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Order Value</div>
+        <div class="kpi-value" id="kpi-avg">0</div>
+        <div class="kpi-sub">Per shipment</div>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card wide">
+        <h3>Monthly Amount Trend</h3>
+        <div id="chart-trend" class="chart"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Amount by Product</h3>
+        <div id="chart-product" class="chart"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Order Status Breakdown</h3>
+        <div id="chart-status" class="chart"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Amount by Region</h3>
+        <div id="chart-region" class="chart"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Boxes by Supplier</h3>
+        <div id="chart-supplier" class="chart"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  google.charts.load('current', { packages: ['corechart'] });
+
+  let RAW = [];
+
+  google.script.run.withSuccessHandler(onDataLoaded).withFailureHandler(onError).getShipmentData();
+
+  function onError(err) {
+    document.getElementById('loading').innerHTML =
+      '<div style="color:#b00020;">Error loading data: ' + err.message + '</div>';
+  }
+
+  function onDataLoaded(rows) {
+    RAW = rows;
+    document.getElementById('subtitle').textContent =
+      rows.length + ' shipments loaded — filter and explore below.';
+    populateFilterOptions();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    google.charts.setOnLoadCallback(() => renderAll());
+
+    ['f-product', 'f-region', 'f-supplier', 'f-status'].forEach(id => {
+      document.getElementById(id).addEventListener('change', renderAll);
+    });
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      ['f-product', 'f-region', 'f-supplier', 'f-status'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      renderAll();
+    });
+  }
+
+  function uniqueSorted(arr, key) {
+    return [...new Set(arr.map(r => r[key]))].sort();
+  }
+
+  function populateFilterOptions() {
+    fillSelect('f-product', uniqueSorted(RAW, 'product'));
+    fillSelect('f-region', uniqueSorted(RAW, 'region'));
+    fillSelect('f-supplier', uniqueSorted(RAW, 'supplier'));
+    fillSelect('f-status', uniqueSorted(RAW, 'status'));
+  }
+
+  function fillSelect(id, values) {
+    const sel = document.getElementById(id);
+    values.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    });
+  }
+
+  function getFiltered() {
+    const p = document.getElementById('f-product').value;
+    const r = document.getElementById('f-region').value;
+    const s = document.getElementById('f-supplier').value;
+    const st = document.getElementById('f-status').value;
+    return RAW.filter(row =>
+      (!p || row.product === p) &&
+      (!r || row.region === r) &&
+      (!s || row.supplier === s) &&
+      (!st || row.status === st)
+    );
+  }
+
+  function fmtMoney(n) {
+    return '₹' + Math.round(n).toLocaleString('en-IN');
+  }
+
+  function animateValue(id, endValue, formatter) {
+    const el = document.getElementById(id);
+    const start = 0;
+    const duration = 600;
+    const startTime = performance.now();
+    function step(now) {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const val = start + (endValue - start) * eased;
+      el.textContent = formatter ? formatter(val) : Math.round(val).toLocaleString('en-IN');
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function renderAll() {
+    const data = getFiltered();
+    renderKPIs(data);
+    renderTrendChart(data);
+    renderProductChart(data);
+    renderStatusChart(data);
+    renderRegionChart(data);
+    renderSupplierChart(data);
+  }
+
+  function renderKPIs(data) {
+    const totalAmount = data.reduce((s, r) => s + r.amount, 0);
+    const totalBoxes = data.reduce((s, r) => s + r.boxes, 0);
+    const count = data.length;
+    const delivered = data.filter(r => r.status === 'Delivered').length;
+    const deliveredRate = count ? (delivered / count) * 100 : 0;
+    const avgOrder = count ? totalAmount / count : 0;
+
+    animateValue('kpi-amount', totalAmount, fmtMoney);
+    animateValue('kpi-boxes', totalBoxes);
+    animateValue('kpi-count', count);
+    animateValue('kpi-delivered', deliveredRate, v => Math.round(v) + '%');
+    animateValue('kpi-avg', avgOrder, fmtMoney);
+  }
+
+  function groupSum(data, key, valueKey) {
+    const map = {};
+    data.forEach(r => { map[r[key]] = (map[r[key]] || 0) + r[valueKey]; });
+    return map;
+  }
+
+  function groupCount(data, key) {
+    const map = {};
+    data.forEach(r => { map[r[key]] = (map[r[key]] || 0) + 1; });
+    return map;
+  }
+
+  const CHART_COLORS = ['#0a5d1e', '#84c637', '#5db13a', '#168a96', '#7030a0', '#617e24', '#919aaa'];
+
+  function renderTrendChart(data) {
+    const map = groupSum(data, 'month', 'amount');
+    const months = Object.keys(map).sort();
+    const dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Month');
+    dt.addColumn('number', 'Amount');
+    months.forEach(m => dt.addRow([m, map[m]]));
+    const chart = new google.visualization.LineChart(document.getElementById('chart-trend'));
+    chart.draw(dt, {
+      legend: 'none',
+      colors: ['#0a5d1e'],
+      backgroundColor: 'transparent',
+      chartArea: { left: 60, top: 20, right: 20, bottom: 40, width: '90%', height: '75%' },
+      hAxis: { textStyle: { fontSize: 10 } },
+      vAxis: { format: '#,##0', textStyle: { fontSize: 10 } },
+      lineWidth: 3,
+      pointSize: 5
+    });
+  }
+
+  function renderProductChart(data) {
+    const map = groupSum(data, 'product', 'amount');
+    const keys = Object.keys(map).sort();
+    const dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Product');
+    dt.addColumn('number', 'Amount');
+    keys.forEach(k => dt.addRow([k, map[k]]));
+    const chart = new google.visualization.ColumnChart(document.getElementById('chart-product'));
+    chart.draw(dt, {
+      legend: 'none',
+      colors: ['#0a5d1e'],
+      backgroundColor: 'transparent',
+      chartArea: { left: 60, top: 10, right: 10, bottom: 40, width: '85%', height: '75%' },
+      hAxis: { textStyle: { fontSize: 9 } },
+      vAxis: { format: '#,##0', textStyle: { fontSize: 9 } }
+    });
+  }
+
+  function renderStatusChart(data) {
+    const map = groupCount(data, 'status');
+    const keys = Object.keys(map);
+    const dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Status');
+    dt.addColumn('number', 'Count');
+    keys.forEach(k => dt.addRow([k, map[k]]));
+    const chart = new google.visualization.PieChart(document.getElementById('chart-status'));
+    chart.draw(dt, {
+      colors: CHART_COLORS,
+      backgroundColor: 'transparent',
+      chartArea: { top: 10, height: '85%' },
+      legend: { position: 'right', textStyle: { fontSize: 10 } },
+      pieHole: 0.4
+    });
+  }
+
+  function renderRegionChart(data) {
+    const map = groupSum(data, 'region', 'amount');
+    const keys = Object.keys(map).sort();
+    const dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Region');
+    dt.addColumn('number', 'Amount');
+    keys.forEach(k => dt.addRow([k, map[k]]));
+    const chart = new google.visualization.PieChart(document.getElementById('chart-region'));
+    chart.draw(dt, {
+      colors: CHART_COLORS,
+      backgroundColor: 'transparent',
+      chartArea: { top: 10, height: '85%' },
+      legend: { position: 'right', textStyle: { fontSize: 10 } },
+      pieHole: 0.4
+    });
+  }
+
+  function renderSupplierChart(data) {
+    const map = groupSum(data, 'supplier', 'boxes');
+    const keys = Object.keys(map).sort();
+    const dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Supplier');
+    dt.addColumn('number', 'Boxes');
+    keys.forEach(k => dt.addRow([k, map[k]]));
+    const chart = new google.visualization.BarChart(document.getElementById('chart-supplier'));
+    chart.draw(dt, {
+      legend: 'none',
+      colors: ['#43c620'],
+      backgroundColor: 'transparent',
+      chartArea: { left: 60, top: 10, right: 20, bottom: 20, width: '85%', height: '85%' },
+      hAxis: { format: '#,##0', textStyle: { fontSize: 9 } },
+      vAxis: { textStyle: { fontSize: 9 } }
+    });
+  }
+</script>
+</body>
+</html>
